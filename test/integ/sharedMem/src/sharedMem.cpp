@@ -25,11 +25,11 @@ class SharedMemKernel
 {
 public:
     ALPAKA_NO_HOST_ACC_WARNING
-    template<typename TAcc>
-    ALPAKA_FN_ACC auto operator()(TAcc const& acc, Val* const puiBlockRetVals) const -> void
+    template<typename TAcc, typename TMemoryHandle, typename Idx>
+    ALPAKA_FN_ACC auto operator()(
+        TAcc const& acc,
+        alpaka::Accessor<TMemoryHandle, Val, Idx, 1, alpaka::WriteAccess> const puiBlockRetVals) const -> void
     {
-        using Idx = alpaka::Idx<TAcc>;
-
         static_assert(alpaka::Dim<TAcc>::value == 1, "The SharedMemKernel expects 1-dimensional indices!");
 
         // The number of threads in this block.
@@ -161,7 +161,7 @@ TEMPLATE_LIST_TEST_CASE("sharedMem", "[sharedMem]", TestAccs)
     alpaka::memcpy(queue, blockRetValsAcc, blockRetVals, resultElemCount);
 
     // Create the kernel execution task.
-    auto const taskKernel = alpaka::createTaskKernel<Acc>(workDiv, kernel, alpaka::getPtrNative(blockRetValsAcc));
+    auto const taskKernel = alpaka::createTaskKernel<Acc>(workDiv, kernel, alpaka::writeAccess(blockRetValsAcc));
 
     // Profile the kernel execution.
     std::cout << "Execution time: " << alpaka::test::integ::measureTaskRunTimeMs(queue, taskKernel) << " ms"

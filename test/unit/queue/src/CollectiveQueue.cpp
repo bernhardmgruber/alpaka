@@ -24,13 +24,14 @@
 
 struct QueueCollectiveTestKernel
 {
-    template<typename TAcc>
-    auto operator()(TAcc const& acc, int* resultsPtr) const -> void
+    template<typename TAcc, typename TMemoryHandle, typename TIdx>
+    auto operator()(TAcc const& acc, alpaka::Accessor<TMemoryHandle, int, TIdx, 1, alpaka::WriteAccess> const results)
+        const -> void
     {
         size_t threadId = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc)[0];
         // avoid that one thread is doing all the work
         std::this_thread::sleep_for(std::chrono::milliseconds(200u * threadId));
-        resultsPtr[threadId] = static_cast<int>(threadId);
+        results[threadId] = static_cast<int>(threadId);
     }
 };
 
@@ -64,7 +65,7 @@ TEST_CASE("queueCollective", "[queue]")
     {
         // The kernel will be performed collectively.
         // OpenMP will distribute the work between the threads from the parallel region
-        alpaka::exec<Acc>(queue, workDiv, QueueCollectiveTestKernel{}, results.data());
+        alpaka::exec<Acc>(queue, workDiv, QueueCollectiveTestKernel{}, alpaka::writeAccess(results));
 
         alpaka::wait(queue);
     }

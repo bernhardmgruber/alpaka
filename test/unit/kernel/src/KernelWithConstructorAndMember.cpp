@@ -22,12 +22,14 @@ public:
     }
 
     ALPAKA_NO_HOST_ACC_WARNING
-    template<typename TAcc>
-    ALPAKA_FN_ACC auto operator()(TAcc const& acc, bool* success) const -> void
+    template<typename TAcc, typename TMemoryHandle>
+    ALPAKA_FN_ACC auto operator()(
+        TAcc const& acc,
+        alpaka::Accessor<TMemoryHandle, bool, alpaka::Idx<TAcc>, 1, alpaka::WriteAccess> const success) const -> void
     {
         alpaka::ignore_unused(acc);
 
-        ALPAKA_CHECK(*success, 42 == m_val);
+        ALPAKA_CHECK(success[0], 42 == m_val);
     }
 
 private:
