@@ -1,4 +1,4 @@
-/* Copyright 2021 David M. Rogers
+/* Copyright 2021 David M. Rogers, Bernhard Manfred Gruber
  *
  * This file is part of Alpaka.
  *

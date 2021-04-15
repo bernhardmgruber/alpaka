@@ -1,4 +1,4 @@
-/* Copyright 2019 Benjamin Worpitz, Jonas Schenke, Matthias Werner
+/* Copyright 2019-2021 Benjamin Worpitz, Jonas Schenke, Matthias Werner, Bernhard Manfred Gruber
  *
  * This file exemplifies usage of alpaka.
  *
