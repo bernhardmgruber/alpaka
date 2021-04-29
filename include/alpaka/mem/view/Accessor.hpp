@@ -41,48 +41,36 @@ namespace alpaka
     };
 
     //! An accessor is an abstraction for accessing memory objects such as views and buffers.
-    //! @tparam TMemoryHandle A handle to a memory object.
+    //! @tparam TAcc The accelerator on which this accessor is used.
     //! @tparam TElem The type of the element stored by the memory object. Values and references to this type are
     //! returned on access.
     //! @tparam TBufferIdx The integral type used for indexing and index computations.
     //! @tparam TDim The dimensionality of the accessed data.
-    //! @tparam TAccessModes Either a single access tag type or a `std::tuple` containing multiple access tag types.
-    template<typename TMemoryHandle, typename TElem, typename TBufferIdx, std::size_t TDim, typename TAccessModes>
+    //! @tparam TAccessModes A sequence of access tag types.
+    template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t TDim, typename... TAccessModes>
     struct Accessor;
+
+    //! Accessors with multiple access modes, by default, behave as an accessor of their first access mode.
+    template<
+        typename TAcc,
+        typename TElem,
+        typename TBufferIdx,
+        std::size_t TDim,
+        typename TAccessMode1,
+        typename TAccessMode2,
+        typename... TAccessModes>
+    struct Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessMode1, TAccessMode2, TAccessModes...>
+        : Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessMode1>
+    {
+        using Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessMode1>::Accessor;
+    };
 
     namespace traits
     {
-        //! The customization point for how to build an accessor for a given memory object.
-        template<typename TMemoryObject, typename SFINAE = void>
-        struct BuildAccessor
-        {
-            template<typename... TAccessModes, typename TMemoryObjectForwardRef>
-            ALPAKA_FN_HOST_ACC static auto buildAccessor(TMemoryObjectForwardRef&&)
-            {
-                static_assert(
-                    meta::DependentFalseType<TMemoryObject>::value,
-                    "BuildAccessor<TMemoryObject> is not specialized for your TMemoryObject.");
-            }
-        };
+        //! The customization point for how to build an accessor for a given accelerator.
+        template<typename TAcc, typename SFINAE = void>
+        struct BuildAccessor;
     } // namespace traits
-
-    namespace internal
-    {
-        template<typename AccessorOrBuffer>
-        struct MemoryHandle
-        {
-        };
-
-        template<typename TMemoryHandle, typename TElem, typename TBufferIdx, std::size_t TDim, typename TAccessModes>
-        struct MemoryHandle<Accessor<TMemoryHandle, TElem, TBufferIdx, TDim, TAccessModes>>
-        {
-            using type = TMemoryHandle;
-        };
-    } // namespace internal
-
-    /// Get the memory handle type of the given accessor or buffer type.
-    template<typename Accessor>
-    using MemoryHandle = typename internal::MemoryHandle<Accessor>::type;
 
     namespace internal
     {
@@ -91,8 +79,8 @@ namespace alpaka
         {
         };
 
-        template<typename TMemoryHandle, typename TElem, typename TBufferIdx, std::size_t Dim, typename TAccessModes>
-        struct IsAccessor<Accessor<TMemoryHandle, TElem, TBufferIdx, Dim, TAccessModes>> : std::true_type
+        template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t Dim, typename... TAccessModes>
+        struct IsAccessor<Accessor<TAcc, TElem, TBufferIdx, Dim, TAccessModes...>> : std::true_type
         {
         };
     } // namespace internal
@@ -100,74 +88,82 @@ namespace alpaka
     //! Creates an accessor for the given memory object using the specified access modes. Memory objects are e.g.
     //! alpaka views and buffers.
     template<
+        typename TAcc,
         typename... TAccessModes,
         typename TMemoryObject,
         typename = std::enable_if_t<!internal::IsAccessor<std::decay_t<TMemoryObject>>::value>>
     ALPAKA_FN_HOST_ACC auto accessWith(TMemoryObject&& memoryObject)
     {
-        return traits::BuildAccessor<std::decay_t<TMemoryObject>>::template buildAccessor<TAccessModes...>(
-            memoryObject);
+        return traits::BuildAccessor<TAcc>::template buildAccessor<TAccessModes...>(memoryObject);
     }
 
     //! Constrains an existing accessor with multiple access modes to the specified access modes.
     // TODO: currently only allows constraining down to 1 access mode
     template<
+        typename TAcc,
         typename TNewAccessMode,
-        typename TMemoryHandle,
         typename TElem,
         typename TBufferIdx,
         std::size_t TDim,
+        typename TPrevAccessMode1,
+        typename TPrevAccessMode2,
         typename... TPrevAccessModes>
     ALPAKA_FN_HOST_ACC auto accessWith(
-        const Accessor<TMemoryHandle, TElem, TBufferIdx, TDim, std::tuple<TPrevAccessModes...>>& acc)
+        const Accessor<TAcc, TElem, TBufferIdx, TDim, TPrevAccessMode1, TPrevAccessMode2, TPrevAccessModes...>& acc)
     {
         static_assert(
-            meta::Contains<std::tuple<TPrevAccessModes...>, TNewAccessMode>::value,
+            meta::Contains<std::tuple<TPrevAccessMode1, TPrevAccessMode2, TPrevAccessModes...>, TNewAccessMode>::value,
             "The accessed accessor must already contain the requested access mode");
-        return Accessor<TMemoryHandle, TElem, TBufferIdx, TDim, TNewAccessMode>{acc};
+        return Accessor<TAcc, TElem, TBufferIdx, TDim, TNewAccessMode>{acc};
     }
 
     //! Constrains an existing accessor to the specified access modes.
     // constraining accessor to the same access mode again just passes through
-    template<typename TNewAccessMode, typename TMemoryHandle, typename TElem, typename TBufferIdx, std::size_t TDim>
-    ALPAKA_FN_HOST_ACC auto accessWith(const Accessor<TMemoryHandle, TElem, TBufferIdx, TDim, TNewAccessMode>& acc)
+    template<typename TAcc, typename TNewAccessMode, typename TElem, typename TBufferIdx, std::size_t TDim>
+    ALPAKA_FN_HOST_ACC auto accessWith(const Accessor<TAcc, TElem, TBufferIdx, TDim, TNewAccessMode>& acc)
     {
         return acc;
     }
 
-    //! Creates a read-write accessor for the given memory object (view, buffer, ...) or accessor.
-    template<typename TMemoryObjectOrAccessor>
-    ALPAKA_FN_HOST_ACC auto access(TMemoryObjectOrAccessor&& viewOrAccessor)
+    //! Creates a read-write accessor for the given memory object (view, buffer, ...).
+    template<typename TAcc, typename TMemoryObject>
+    ALPAKA_FN_HOST_ACC auto access(TMemoryObject&& view)
     {
-        return accessWith<ReadWriteAccess>(std::forward<TMemoryObjectOrAccessor>(viewOrAccessor));
+        return accessWith<TAcc, ReadWriteAccess>(std::forward<TMemoryObject>(view));
     }
 
-    //! Creates a read-only accessor for the given memory object (view, buffer, ...) or accessor.
-    template<typename TMemoryObjectOrAccessor>
+    //! Constrains an existing accessor to read/write access.
+    template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t TDim, typename... TAccessModes>
+    ALPAKA_FN_HOST_ACC auto access(const Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessModes...>& acc)
+    {
+        return accessWith<TAcc, ReadWriteAccess>(acc);
+    }
+
+    //! Creates a read-only accessor for the given memory object (view, buffer, ...).
+    template<typename TAcc, typename TMemoryObjectOrAccessor>
     ALPAKA_FN_HOST_ACC auto readAccess(TMemoryObjectOrAccessor&& viewOrAccessor)
     {
-        return accessWith<ReadAccess>(std::forward<TMemoryObjectOrAccessor>(viewOrAccessor));
+        return accessWith<TAcc, ReadAccess>(std::forward<TMemoryObjectOrAccessor>(viewOrAccessor));
     }
 
-    //! Creates a write-only accessor for the given memory object (view, buffer, ...) or accessor.
-    template<typename TMemoryObjectOrAccessor>
-    ALPAKA_FN_HOST_ACC auto writeAccess(TMemoryObjectOrAccessor&& viewOrAccessor)
+    //! Constrains an existing accessor to read access.
+    template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t TDim, typename... TAccessModes>
+    ALPAKA_FN_HOST_ACC auto readAccess(const Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessModes...>& acc)
     {
-        return accessWith<WriteAccess>(std::forward<TMemoryObjectOrAccessor>(viewOrAccessor));
+        return accessWith<TAcc, ReadAccess>(acc);
     }
 
-    //! An alias for an accessor accessing a buffer on the given accelerator.
-    template<
-        typename TAcc,
-        typename TElem,
-        std::size_t TDim,
-        typename TAccessModes = ReadWriteAccess,
-        typename TIdx = Idx<TAcc>>
-    using BufferAccessor = Accessor<
-        MemoryHandle<decltype(
-            accessWith<TAccessModes>(alpaka::core::declval<Buf<TAcc, TElem, DimInt<TDim>, TIdx>>()))>,
-        TElem,
-        TIdx,
-        TDim,
-        TAccessModes>;
+    //! Creates a write-only accessor for the given memory object (view, buffer, ...).
+    template<typename TAcc, typename TMemoryObject>
+    ALPAKA_FN_HOST_ACC auto writeAccess(TMemoryObject&& view)
+    {
+        return accessWith<TAcc, WriteAccess>(std::forward<TMemoryObject>(view));
+    }
+
+    //! Constrains an existing accessor to write access.
+    template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t TDim, typename... TAccessModes>
+    ALPAKA_FN_HOST_ACC auto writeAccess(const Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessModes...>& acc)
+    {
+        return accessWith<TAcc, WriteAccess>(acc);
+    }
 } // namespace alpaka

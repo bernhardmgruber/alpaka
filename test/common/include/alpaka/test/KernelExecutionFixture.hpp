@@ -30,8 +30,7 @@ namespace alpaka
             using QueueAcc = alpaka::test::DefaultQueue<DevAcc>;
             using WorkDiv = alpaka::WorkDivMembers<Dim, Idx>;
             using ResultBuf = alpaka::Buf<DevAcc, bool, alpaka::DimInt<1>, Idx>;
-            using ResultAccessor = decltype(alpaka::writeAccess(std::declval<ResultBuf>()));
-            using ResultMemoryHandle = alpaka::MemoryHandle<ResultAccessor>;
+            using ResultAccessor = decltype(alpaka::writeAccess<Acc>(std::declval<ResultBuf>()));
 
         public:
             template<typename TExtent>
@@ -65,7 +64,7 @@ namespace alpaka
                     m_queue,
                     m_workDiv,
                     kernelFnObj,
-                    alpaka::writeAccess(bufAccResult),
+                    alpaka::writeAccess<Acc>(bufAccResult),
                     std::forward<TArgs>(args)...);
 
                 // Copy the result value to the host
@@ -73,7 +72,7 @@ namespace alpaka
                 alpaka::memcpy(m_queue, bufHostResult, bufAccResult, bufAccResult);
                 alpaka::wait(m_queue);
 
-                auto const result = alpaka::readAccess(bufHostResult)[0];
+                auto const result = alpaka::readAccess<AccCpuSerial<Dim, Idx>>(bufHostResult)[0]; // TODO
 
                 return result;
             }

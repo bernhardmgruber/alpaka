@@ -68,22 +68,16 @@ namespace alpaka
             using type = TElem&;
         };
 
-        template<typename TElem, typename THeadAccessMode, typename... TTailAccessModes>
-        struct AccessReturnTypeImpl<TElem, std::tuple<THeadAccessMode, TTailAccessModes...>>
-            : AccessReturnTypeImpl<TElem, THeadAccessMode>
-        {
-        };
-
         template<typename TElem, typename TAccessModes>
         using AccessReturnType = typename internal::AccessReturnTypeImpl<TElem, TAccessModes>::type;
     } // namespace internal
 
     //! 1D accessor to memory objects represented by a pointer.
     // We keep this specialization to not store the zero-dim pitch vector and provide one more operator[].
-    template<typename TElem, typename TBufferIdx, typename TAccessModes>
-    struct Accessor<TElem*, TElem, TBufferIdx, 1, TAccessModes>
+    template<typename TAcc, typename TElem, typename TBufferIdx, typename TAccessMode>
+    struct Accessor<TAcc, TElem, TBufferIdx, 1, TAccessMode>
     {
-        using ReturnType = internal::AccessReturnType<TElem, TAccessModes>;
+        using ReturnType = internal::AccessReturnType<TElem, TAccessMode>;
 
         ALPAKA_FN_HOST_ACC Accessor(
             TElem* p_,
@@ -95,8 +89,8 @@ namespace alpaka
             (void) pitchesInBytes_;
         }
 
-        template<typename TOtherAccessModes>
-        ALPAKA_FN_HOST_ACC Accessor(const Accessor<TElem*, TElem, TBufferIdx, 1, TOtherAccessModes>& other)
+        template<typename TOtherAccessMode>
+        ALPAKA_FN_HOST_ACC Accessor(const Accessor<TAcc, TElem, TBufferIdx, 1, TOtherAccessMode>& other)
             : p(other.p)
             , extents(other.extents)
         {
@@ -104,12 +98,12 @@ namespace alpaka
 
         ALPAKA_FN_HOST_ACC auto operator[](Vec<DimInt<1>, TBufferIdx> i) const -> ReturnType
         {
-            return (*this)(i[0]);
+            return (*this) (i[0]);
         }
 
         ALPAKA_FN_HOST_ACC auto operator[](TBufferIdx i) const -> ReturnType
         {
-            return (*this)(i);
+            return (*this) (i);
         }
 
         ALPAKA_FN_HOST_ACC auto operator()(TBufferIdx i) const -> ReturnType
@@ -117,15 +111,27 @@ namespace alpaka
             return p[i];
         }
 
+        template<typename LoadHints>
+        ALPAKA_FN_HOST_ACC auto load(Vec<DimInt<1>, TBufferIdx> i, LoadHints = {}) const -> TElem
+        {
+            return (*this) (i);
+        }
+
+        template<typename StoreHints>
+        ALPAKA_FN_HOST_ACC void store(Vec<DimInt<1>, TBufferIdx> i, TElem value, StoreHints = {})
+        {
+            (*this)(i) = value;
+        }
+
         TElem* p;
         Vec<DimInt<1>, TBufferIdx> extents;
     };
 
     //! Higher than 1D accessor to memory objects represented by a pointer.
-    template<typename TElem, typename TBufferIdx, std::size_t TDim, typename TAccessModes>
-    struct Accessor<TElem*, TElem, TBufferIdx, TDim, TAccessModes>
+    template<typename TAcc, typename TElem, typename TBufferIdx, std::size_t TDim, typename TAccessMode>
+    struct Accessor<TAcc, TElem, TBufferIdx, TDim, TAccessMode>
     {
-        using ReturnType = internal::AccessReturnType<TElem, TAccessModes>;
+        using ReturnType = internal::AccessReturnType<TElem, TAccessMode>;
 
         ALPAKA_FN_HOST_ACC Accessor(
             TElem* p_,
@@ -137,8 +143,8 @@ namespace alpaka
         {
         }
 
-        template<typename TOtherAccessModes>
-        ALPAKA_FN_HOST_ACC Accessor(const Accessor<TElem*, TElem, TBufferIdx, TDim, TOtherAccessModes>& other)
+        template<typename TOtherAccessMode>
+        ALPAKA_FN_HOST_ACC Accessor(const Accessor<TElem*, TElem, TBufferIdx, TDim, TOtherAccessMode>& other)
             : p(other.p)
             , pitchesInBytes(other.pitchesInBytes)
             , extents(other.extents)
@@ -175,7 +181,19 @@ namespace alpaka
         ALPAKA_FN_HOST_ACC auto operator()(Ts... i) const -> ReturnType
         {
             static_assert(sizeof...(Ts) == TDim, "You need to specify TDim indices.");
-            return subscript(Vec<DimInt<TDim>, TBufferIdx>{static_cast<TBufferIdx>(i)...});
+            return (*this)[Vec<DimInt<TDim>, TBufferIdx>{static_cast<TBufferIdx>(i)...}];
+        }
+
+        template<typename LoadHints>
+        ALPAKA_FN_HOST_ACC auto load(Vec<DimInt<TDim>, TBufferIdx> i, LoadHints = {}) const -> TElem
+        {
+            return (*this)[i];
+        }
+
+        template<typename StoreHints>
+        ALPAKA_FN_HOST_ACC void store(Vec<DimInt<TDim>, TBufferIdx> i, TElem value, StoreHints = {})
+        {
+            (*this)[i] = value;
         }
 
         TElem* p;
@@ -205,23 +223,9 @@ namespace alpaka
             {
             };
 
-            template<typename... TAccessModes>
-            struct BuildAccessModeList;
-
-            template<typename TAccessMode>
-            struct BuildAccessModeList<TAccessMode>
-            {
-                using type = TAccessMode;
-            };
-
-            template<typename TAccessMode1, typename TAccessMode2, typename... TAccessModes>
-            struct BuildAccessModeList<TAccessMode1, TAccessMode2, TAccessModes...>
-            {
-                using type = std::tuple<TAccessMode1, TAccessMode2, TAccessModes...>;
-            };
-
             ALPAKA_NO_HOST_ACC_WARNING
             template<
+                typename TAcc,
                 typename... TAccessModes,
                 typename TViewForwardRef,
                 std::size_t... TPitchIs,
@@ -244,23 +248,22 @@ namespace alpaka
                     !std::is_same<decltype(p), const Elem*>::value
                         || std::is_same<std::tuple<TAccessModes...>, std::tuple<alpaka::ReadAccess>>::value,
                     "When getPtrNative() returns a const raw pointer, the access mode must be ReadAccess");
-                using AccessModeList = typename BuildAccessModeList<TAccessModes...>::type;
-                return Accessor<Elem*, Elem, TBufferIdx, dim, AccessModeList>{
-                    const_cast<Elem*>(p), // strip constness, this is handled the the access modes
+                return Accessor<TAcc, Elem, TBufferIdx, dim, TAccessModes...>{
+                    const_cast<Elem*>(p), // strip constness, this is handled by the access modes
                     {getPitchBytes<TPitchIs + 1>(view)...},
                     {extent::getExtent<TExtentIs>(view)...}};
             }
         } // namespace internal
 
         //! Builds an accessor from view like memory objects.
-        template<typename TView>
-        struct BuildAccessor<TView, std::enable_if_t<internal::IsView<TView>::value>>
+        template<typename TAcc>
+        struct BuildAccessor<TAcc, void>
         {
             template<typename... TAccessModes, typename TViewForwardRef>
             ALPAKA_FN_HOST_ACC static auto buildAccessor(TViewForwardRef&& view)
             {
-                using Dim = Dim<std::decay_t<TView>>;
-                return internal::buildViewAccessor<TAccessModes...>(
+                using Dim = Dim<std::decay_t<TViewForwardRef>>;
+                return internal::buildViewAccessor<TAcc, TAccessModes...>(
                     std::forward<TViewForwardRef>(view),
                     std::make_index_sequence<Dim::value - 1>{},
                     std::make_index_sequence<Dim::value>{});

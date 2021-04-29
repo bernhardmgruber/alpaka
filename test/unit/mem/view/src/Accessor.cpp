@@ -37,7 +37,7 @@ TEST_CASE("IsView", "[accessor]")
     STATIC_REQUIRE(IsView<alpaka::ViewSubView<Dev, int, Dim, Size>>::value);
 
     // accessor
-    auto accessor = alpaka::access(buffer);
+    auto accessor = alpaka::access<Acc>(buffer);
     STATIC_REQUIRE(!IsView<decltype(accessor)>::value);
 }
 
@@ -58,10 +58,10 @@ namespace
 
     struct WriteKernelExplicit
     {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
+        template<typename TAcc, typename TIdx>
         ALPAKA_FN_ACC void operator()(
             TAcc const&,
-            alpaka::Accessor<TMemoryHandle, float, TIdx, 1, alpaka::WriteAccess> const data) const
+            alpaka::Accessor<TAcc, float, TIdx, 1, alpaka::WriteAccess> const data) const
         {
             data[1] = 1.0f;
             data(2) = 2.0f;
@@ -85,10 +85,10 @@ namespace
 
     struct ReadKernelExplicit
     {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
+        template<typename TAcc, typename TIdx>
         ALPAKA_FN_ACC void operator()(
             TAcc const&,
-            alpaka::Accessor<TMemoryHandle, float, TIdx, 1, alpaka::ReadAccess> const data) const
+            alpaka::Accessor<TAcc, float, TIdx, 1, alpaka::ReadAccess> const data) const
         {
             float const v1 = data[1];
             float const v2 = data(2);
@@ -101,10 +101,10 @@ namespace
 
     struct ReadWriteKernelExplicit
     {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
+        template<typename TAcc, typename TIdx>
         ALPAKA_FN_ACC void operator()(
             TAcc const&,
-            alpaka::Accessor<TMemoryHandle, float, TIdx, 1, alpaka::ReadWriteAccess> const data) const
+            alpaka::Accessor<TAcc, float, TIdx, 1, alpaka::ReadWriteAccess> const data) const
         {
             float const v1 = data[1];
             float const v2 = data(2);
@@ -136,11 +136,11 @@ TEST_CASE("readWrite", "[accessor]")
         alpaka::Vec<Dim, Size>{Size{1}},
         alpaka::Vec<Dim, Size>{Size{1}}};
 
-    alpaka::exec<Acc>(queue, workdiv, WriteKernelTemplate{}, alpaka::writeAccess(buffer));
-    alpaka::exec<Acc>(queue, workdiv, WriteKernelExplicit{}, alpaka::writeAccess(buffer));
-    alpaka::exec<Acc>(queue, workdiv, ReadKernelTemplate{}, alpaka::readAccess(buffer));
-    alpaka::exec<Acc>(queue, workdiv, ReadKernelExplicit{}, alpaka::readAccess(buffer));
-    alpaka::exec<Acc>(queue, workdiv, ReadWriteKernelExplicit{}, alpaka::access(buffer));
+    alpaka::exec<Acc>(queue, workdiv, WriteKernelTemplate{}, alpaka::writeAccess<Acc>(buffer));
+    alpaka::exec<Acc>(queue, workdiv, WriteKernelExplicit{}, alpaka::writeAccess<Acc>(buffer));
+    alpaka::exec<Acc>(queue, workdiv, ReadKernelTemplate{}, alpaka::readAccess<Acc>(buffer));
+    alpaka::exec<Acc>(queue, workdiv, ReadKernelExplicit{}, alpaka::readAccess<Acc>(buffer));
+    alpaka::exec<Acc>(queue, workdiv, ReadWriteKernelExplicit{}, alpaka::access<Acc>(buffer));
 }
 
 namespace
@@ -244,7 +244,12 @@ TEST_CASE("projection", "[accessor]")
         alpaka::Vec<Dim, Size>{Size{1}},
         alpaka::Vec<Dim, Size>{Size{1}},
         alpaka::Vec<Dim, Size>{Size{1}}};
-    alpaka::exec<Acc>(queue, workdiv, CopyKernel{}, alpaka::readAccess(srcBuffer), alpaka::writeAccess(dstBuffer));
+    alpaka::exec<Acc>(
+        queue,
+        workdiv,
+        CopyKernel{},
+        alpaka::readAccess<Acc>(srcBuffer),
+        alpaka::writeAccess<Acc>(dstBuffer));
 
     alpaka::memcpy(queue, host, dstBuffer, 1);
 
@@ -259,115 +264,23 @@ TEST_CASE("constraining", "[accessor]")
 
     auto const devAcc = alpaka::getDevByIdx<Acc>(0u);
     auto buffer = alpaka::allocBuf<int, Size>(devAcc, Size{1});
-    using MemoryHandle = alpaka::MemoryHandle<decltype(alpaka::access(buffer))>;
 
-    alpaka::Accessor<
-        MemoryHandle,
-        int,
-        Size,
-        1,
-        std::tuple<alpaka::ReadAccess, alpaka::WriteAccess, alpaka::ReadWriteAccess>>
-        acc = alpaka::accessWith<alpaka::ReadAccess, alpaka::WriteAccess, alpaka::ReadWriteAccess>(buffer);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::ReadAccess, alpaka::WriteAccess, alpaka::ReadWriteAccess> acc
+        = alpaka::accessWith<Acc, alpaka::ReadAccess, alpaka::WriteAccess, alpaka::ReadWriteAccess>(buffer);
 
     // constraining from multi-tag to single-tag
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::ReadAccess> readAcc = alpaka::readAccess(acc);
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::WriteAccess> writeAcc = alpaka::writeAccess(acc);
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::ReadWriteAccess> readWriteAcc = alpaka::access(acc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::ReadAccess> readAcc = alpaka::readAccess<Acc>(acc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::WriteAccess> writeAcc = alpaka::writeAccess<Acc>(acc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::ReadWriteAccess> readWriteAcc = alpaka::access<Acc>(acc);
     (void) readAcc;
     (void) writeAcc;
     (void) readWriteAcc;
 
     // constraining from single-tag to single-tag
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::ReadAccess> readAcc2 = alpaka::readAccess(readAcc);
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::WriteAccess> writeAcc2 = alpaka::writeAccess(writeAcc);
-    alpaka::Accessor<MemoryHandle, int, Size, 1, alpaka::ReadWriteAccess> readWriteAcc2 = alpaka::access(readWriteAcc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::ReadAccess> readAcc2 = alpaka::readAccess<Acc>(readAcc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::WriteAccess> writeAcc2 = alpaka::writeAccess<Acc>(writeAcc);
+    alpaka::Accessor<Acc, int, Size, 1, alpaka::ReadWriteAccess> readWriteAcc2 = alpaka::access<Acc>(readWriteAcc);
     (void) readAcc2;
     (void) writeAcc2;
     (void) readWriteAcc2;
-}
-
-namespace
-{
-    struct BufferAccessorKernelRead
-    {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
-        ALPAKA_FN_ACC void operator()(
-            TAcc const&,
-            alpaka::Accessor<TMemoryHandle, int, TIdx, 1, alpaka::ReadAccess> const r1,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::ReadAccess> const r2,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::ReadAccess, TIdx> const r3) const noexcept
-        {
-            static_assert(std::is_same<decltype(r1), decltype(r2)>::value, "");
-            static_assert(std::is_same<decltype(r2), decltype(r3)>::value, "");
-        }
-    };
-
-    struct BufferAccessorKernelWrite
-    {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
-        ALPAKA_FN_ACC void operator()(
-            TAcc const&,
-            alpaka::Accessor<TMemoryHandle, int, TIdx, 1, alpaka::WriteAccess> const w1,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::WriteAccess> const w2,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::WriteAccess, TIdx> const w3) const noexcept
-        {
-            static_assert(std::is_same<decltype(w1), decltype(w2)>::value, "");
-            static_assert(std::is_same<decltype(w2), decltype(w3)>::value, "");
-        }
-    };
-    struct BufferAccessorKernelReadWrite
-    {
-        template<typename TAcc, typename TMemoryHandle, typename TIdx>
-        ALPAKA_FN_ACC void operator()(
-            TAcc const&,
-            alpaka::Accessor<TMemoryHandle, int, TIdx, 1, alpaka::ReadWriteAccess> const rw1,
-            alpaka::BufferAccessor<TAcc, int, 1> const rw2,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::ReadWriteAccess> const rw3,
-            alpaka::BufferAccessor<TAcc, int, 1, alpaka::ReadWriteAccess, TIdx> const rw4) const noexcept
-        {
-            static_assert(std::is_same<decltype(rw1), decltype(rw2)>::value, "");
-            static_assert(std::is_same<decltype(rw2), decltype(rw3)>::value, "");
-            static_assert(std::is_same<decltype(rw3), decltype(rw4)>::value, "");
-        }
-    };
-} // namespace
-
-TEST_CASE("BufferAccessor", "[accessor]")
-{
-    using Dim = alpaka::DimInt<1>;
-    using Size = std::size_t;
-    using Acc = alpaka::ExampleDefaultAcc<Dim, Size>;
-    using DevAcc = alpaka::Dev<Acc>;
-    using Queue = alpaka::Queue<DevAcc, alpaka::Blocking>;
-
-    auto const devAcc = alpaka::getDevByIdx<Acc>(0u);
-    auto queue = Queue{devAcc};
-    auto buffer = alpaka::allocBuf<int, Size>(devAcc, Size{1});
-
-    auto const workdiv = alpaka::WorkDivMembers<Dim, Size>{
-        alpaka::Vec<Dim, Size>{Size{1}},
-        alpaka::Vec<Dim, Size>{Size{1}},
-        alpaka::Vec<Dim, Size>{Size{1}}};
-    alpaka::exec<Acc>(
-        queue,
-        workdiv,
-        BufferAccessorKernelRead{},
-        alpaka::readAccess(buffer),
-        alpaka::readAccess(buffer),
-        alpaka::readAccess(buffer));
-    alpaka::exec<Acc>(
-        queue,
-        workdiv,
-        BufferAccessorKernelWrite{},
-        alpaka::writeAccess(buffer),
-        alpaka::writeAccess(buffer),
-        alpaka::writeAccess(buffer));
-    alpaka::exec<Acc>(
-        queue,
-        workdiv,
-        BufferAccessorKernelReadWrite{},
-        alpaka::access(buffer),
-        alpaka::access(buffer),
-        alpaka::access(buffer),
-        alpaka::access(buffer));
 }

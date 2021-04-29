@@ -35,11 +35,11 @@ ALPAKA_STATIC_ACC_MEM_CONSTANT Elem g_constantMemory2DUninitialized[3][2];
 struct StaticDeviceMemoryTestKernel
 {
     ALPAKA_NO_HOST_ACC_WARNING
-    template<typename TAcc, typename TMemoryHandleBool, typename TMemoryHandleElem, typename TElem>
+    template<typename TAcc, typename TElem>
     ALPAKA_FN_ACC void operator()(
         TAcc const& acc,
-        alpaka::Accessor<TMemoryHandleBool, bool, alpaka::Idx<TAcc>, 1, alpaka::WriteAccess> const success,
-        alpaka::Accessor<TMemoryHandleElem, TElem, alpaka::Idx<TAcc>, 2, alpaka::ReadAccess> const constantMem) const
+        alpaka::Accessor<TAcc, bool, alpaka::Idx<TAcc>, 1, alpaka::WriteAccess> const success,
+        alpaka::Accessor<TAcc, TElem, alpaka::Idx<TAcc>, 2, alpaka::ReadAccess> const constantMem) const
     {
         auto const gridThreadExtent = alpaka::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
         auto const gridThreadIdx = alpaka::getIdx<alpaka::Grid, alpaka::Threads>(acc);
@@ -72,7 +72,7 @@ TEMPLATE_LIST_TEST_CASE("staticDeviceMemoryGlobal", "[viewStaticAccMem]", TestAc
         auto const viewConstantMemInitialized
             = alpaka::createStaticDevMemView(&g_constantMemory2DInitialized[0u][0u], devAcc, extent);
 
-        REQUIRE(fixture(kernel, alpaka::readAccess(viewConstantMemInitialized)));
+        REQUIRE(fixture(kernel, alpaka::readAccess<Acc>(viewConstantMemInitialized)));
     }
     // uninitialized static constant device memory
     {
@@ -91,7 +91,7 @@ TEMPLATE_LIST_TEST_CASE("staticDeviceMemoryGlobal", "[viewStaticAccMem]", TestAc
         alpaka::memcpy(queueAcc, viewConstantMemUninitialized, bufHost, extent);
         alpaka::wait(queueAcc);
 
-        REQUIRE(fixture(kernel, alpaka::readAccess(viewConstantMemUninitialized)));
+        REQUIRE(fixture(kernel, alpaka::readAccess<Acc>(viewConstantMemUninitialized)));
     }
 #endif
 }
@@ -127,7 +127,7 @@ TEMPLATE_LIST_TEST_CASE("staticDeviceMemoryConstant", "[viewStaticAccMem]", Test
         auto const viewGlobalMemInitialized
             = alpaka::createStaticDevMemView(&g_globalMemory2DInitialized[0u][0u], devAcc, extent);
 
-        REQUIRE(fixture(kernel, alpaka::readAccess(viewGlobalMemInitialized)));
+        REQUIRE(fixture(kernel, alpaka::readAccess<Acc>(viewGlobalMemInitialized)));
     }
 
     // uninitialized static global device memory
@@ -147,7 +147,7 @@ TEMPLATE_LIST_TEST_CASE("staticDeviceMemoryConstant", "[viewStaticAccMem]", Test
         alpaka::memcpy(queueAcc, viewGlobalMemUninitialized, bufHost, extent);
         alpaka::wait(queueAcc);
 
-        REQUIRE(fixture(kernel, alpaka::readAccess(viewGlobalMemUninitialized)));
+        REQUIRE(fixture(kernel, alpaka::readAccess<Acc>(viewGlobalMemUninitialized)));
     }
 #endif
 }

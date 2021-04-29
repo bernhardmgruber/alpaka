@@ -124,6 +124,7 @@
 #include <alpaka/mem/buf/BufUniformCudaHipRt.hpp>
 #include <alpaka/mem/buf/Traits.hpp>
 #include <alpaka/mem/view/Accessor.hpp>
+#include <alpaka/mem/view/CudaAccessor.hpp>
 #include <alpaka/mem/view/Traits.hpp>
 #include <alpaka/mem/view/ViewAccessor.hpp>
 #include <alpaka/mem/view/ViewCompileTimeArray.hpp>

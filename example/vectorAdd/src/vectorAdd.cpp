@@ -62,6 +62,7 @@ public:
             for(Idx i(threadFirstElemIdx); i < threadLastElemIdxClipped; ++i)
             {
                 C[i] = A[i] + B[i];
+                //C[i] = A.load(i, alpaka::bypassL1Hint) + B[i]; // DEMO
             }
         }
     }
